@@ -1,77 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  listenGroupEvents, listenResponses, updateEventMemo,
-  setEventStatus, copyEvent, getGroup, setGroupName,
+  listenGroupEvents, listenResponses, setEventStatus, copyEvent,
+  getGroup, setGroupName,
 } from '../lib/db';
-import MemoCard from '../components/MemoCard';
+import EventCover from '../components/EventCover';
 import { formatDateJa } from '../lib/utils';
 
-// イベントカード内の参加者バッジ（リアルタイム）
-function ParticipantBadges({ activityId }) {
+function fmtFixed(fd) {
+  if (!fd) return null;
+  return fd.includes('-') && fd.length === 10 ? formatDateJa(fd) : fd;
+}
+
+// グリッドカード内の参加者チップ
+function ParticipantChips({ activityId }) {
   const [responses, setResponses] = useState([]);
   useEffect(() => listenResponses(activityId, setResponses), [activityId]);
   if (!responses.length) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 mt-4">
-      {responses.map((r) => {
-        const isBatsu = r.status === 'unavailable';
-        const style = isBatsu
-          ? 'bg-rose-50 text-rose-400 border-rose-100 opacity-70'
-          : 'bg-blue-50 text-blue-600 border-blue-100';
-        return (
-          <span key={r.id} className={`px-2.5 py-1 rounded-full border text-[9px] font-black tracking-tight ${style}`}>
-            {r.name}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function EventCard({ ev, onArchiveToggle, onCopy }) {
-  const navigate = useNavigate();
-  const archived = ev.status === 'archived';
-  return (
-    <div className={`bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 mb-2 ${archived ? 'opacity-70' : ''}`}>
-      <div
-        className="cursor-pointer active:scale-[0.98] transition-transform"
-        onClick={() => navigate(`/e/${ev.id}`)}
-      >
-        <div className="flex justify-between items-start mb-3">
-          <div className="flex flex-wrap gap-1">
-            {(ev.tags || []).map((t, i) => (
-              <span key={i} className="px-2 py-0.5 text-[9px] bg-blue-100 text-blue-600 rounded font-black uppercase">{t}</span>
-            ))}
-          </div>
-          {ev.fixedDate && (
-            <span className="px-3 py-1 text-[10px] bg-rose-500 text-white rounded-full font-black shadow-sm shrink-0">
-              確定: {formatDateJa(ev.fixedDate)}
-            </span>
-          )}
+    <div className="flex gap-1 flex-wrap mt-2">
+      {responses.map((r) => (
+        <div key={r.id}
+          className="rounded-full flex items-center justify-center font-black"
+          style={{
+            width: 22, height: 22, fontSize: 8,
+            background: 'rgba(0,0,0,0.07)', color: '#444',
+            opacity: r.status === 'unavailable' ? 0.25 : 1,
+          }}
+          title={r.name}>
+          {r.name.slice(0, 1)}
         </div>
-        <h3 className="text-xl font-black text-gray-800 leading-tight">{ev.title}</h3>
-        {!archived && <ParticipantBadges activityId={ev.id} />}
-      </div>
-
-      {!archived && (
-        <MemoCard compact memo={ev.memo} onSave={(m) => updateEventMemo(ev.id, m)} />
-      )}
-
-      <div className="flex gap-2 mt-4 pt-3 border-t border-dashed border-gray-100">
-        <button
-          onClick={() => onArchiveToggle(ev)}
-          className="flex-1 text-[10px] font-black text-gray-400 bg-gray-50 py-2 rounded-xl active:scale-95 transition-transform"
-        >
-          {archived ? '↩️ 復元' : '📦 アーカイブ'}
-        </button>
-        <button
-          onClick={() => onCopy(ev)}
-          className="flex-1 text-[10px] font-black text-blue-500 bg-blue-50 py-2 rounded-xl active:scale-95 transition-transform"
-        >
-          📋 コピーして新規作成
-        </button>
-      </div>
+      ))}
     </div>
   );
 }
@@ -81,6 +40,8 @@ export default function GroupPage() {
   const navigate = useNavigate();
   const [events, setEvents] = useState(null);
   const [groupName, setGroup] = useState('');
+  const [view, setView] = useState('cf'); // 'cf' | 'grid'
+  const [center, setCenter] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
@@ -88,6 +49,13 @@ export default function GroupPage() {
     getGroup(groupId).then((g) => g?.name && setGroup(g.name));
     return unsub;
   }, [groupId]);
+
+  const active = (events || []).filter((e) => e.status !== 'archived');
+  const archived = (events || []).filter((e) => e.status === 'archived');
+
+  useEffect(() => {
+    if (center >= active.length) setCenter(Math.max(0, active.length - 1));
+  }, [active.length, center]);
 
   const editGroupName = async () => {
     const name = prompt('グループ名を入力', groupName);
@@ -108,52 +76,161 @@ export default function GroupPage() {
     navigate(`/e/${newId}`);
   };
 
-  const active = (events || []).filter((e) => e.status !== 'archived');
-  const archived = (events || []).filter((e) => e.status === 'archived');
+  const centerEv = active[center];
 
   return (
-    <div className="space-y-6 animate-in">
-      <div className="text-center -mt-4 mb-2">
-        <span onClick={editGroupName} className="text-2xl font-bold text-gray-800 tracking-tight cursor-pointer">
-          {groupName || 'SyncAct'}
-        </span>
-        <span className="text-sm font-bold text-gray-400 ml-1">一覧</span>
+    <div className="animate-in pb-12">
+      {/* ヘッダー */}
+      <div className="flex justify-between items-start mb-7 px-1">
+        <div>
+          <div className="text-sm font-black italic" style={{ color: '#aaa', letterSpacing: '-0.3px' }}>
+            SyncAct
+          </div>
+          <div onClick={editGroupName}
+            className="font-black cursor-pointer"
+            style={{ fontSize: 28, letterSpacing: '-1.5px', lineHeight: 1, marginTop: 4 }}>
+            {groupName || 'グループ'}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2 mt-1">
+          <button onClick={() => navigate(`/g/${groupId}/new`)}
+            className="btn-dark px-5 py-2 text-xs">＋ 新規作成</button>
+          <div className="flex rounded-xl p-0.5 gap-0.5" style={{ background: 'rgba(0,0,0,0.07)' }}>
+            <button onClick={() => setView('cf')}
+              className="rounded-lg px-2.5 py-1 text-sm border-0 cursor-pointer"
+              style={view === 'cf'
+                ? { background: '#fff', color: '#111', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }
+                : { background: 'none', color: '#999' }}>◫</button>
+            <button onClick={() => setView('grid')}
+              className="rounded-lg px-2.5 py-1 text-sm border-0 cursor-pointer"
+              style={view === 'grid'
+                ? { background: '#fff', color: '#111', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }
+                : { background: 'none', color: '#999' }}>⊞</button>
+          </div>
+        </div>
       </div>
 
-      <div className="flex justify-between items-center px-2">
-        <h2 className="text-xl font-black text-gray-900">イベント一覧</h2>
-        <button
-          onClick={() => navigate(`/g/${groupId}/new`)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-black shadow-lg hover:bg-blue-700 transition-all active:scale-90"
-        >
-          ＋ 新規作成
-        </button>
-      </div>
+      {events === null && (
+        <p className="text-center py-12 text-gray-400 text-sm font-bold">読み込み中...</p>
+      )}
+      {events !== null && !active.length && (
+        <p className="text-center py-12 text-gray-400 text-sm font-bold">イベントがありません</p>
+      )}
 
-      <div className="grid gap-4">
-        {events === null && (
-          <p className="text-center py-8 text-gray-300 text-sm font-bold">読み込み中...</p>
-        )}
-        {events !== null && !active.length && (
-          <p className="text-center py-8 text-gray-300 text-sm font-bold">イベントがありません</p>
-        )}
-        {active.map((ev) => (
-          <EventCard key={ev.id} ev={ev} onArchiveToggle={handleArchiveToggle} onCopy={handleCopy} />
-        ))}
-      </div>
+      {/* ===== カバーフロー ===== */}
+      {view === 'cf' && active.length > 0 && (
+        <div>
+          <div className="cf-wrap">
+            {active.map((ev, i) => {
+              const offset = i - center;
+              let posClass = 'cf-pos-hidden';
+              if (offset === 0) posClass = 'cf-pos-0';
+              else if (offset === -1) posClass = 'cf-pos--1';
+              else if (offset === -2) posClass = 'cf-pos--2';
+              else if (offset === 1) posClass = 'cf-pos-1';
+              else if (offset === 2) posClass = 'cf-pos-2';
+              return (
+                <div key={ev.id}
+                  className={`cf-card ${posClass}`}
+                  onClick={() => offset === 0 ? navigate(`/e/${ev.id}`) : setCenter(i)}>
+                  <EventCover ev={ev}>
+                    <div className="cf-label">
+                      <div className="cf-title">{ev.title}</div>
+                      {ev.fixedDate && <div className="cf-sub">確定: {fmtFixed(ev.fixedDate)}</div>}
+                    </div>
+                  </EventCover>
+                </div>
+              );
+            })}
+          </div>
 
+          {/* 中央カードの情報 */}
+          {centerEv && (
+            <div className="text-center mt-4 px-2">
+              <div className="font-black" style={{ fontSize: 20, letterSpacing: '-0.8px' }}>
+                {centerEv.title}
+              </div>
+              <div className="flex gap-1.5 justify-center mt-2 flex-wrap">
+                {(centerEv.tags || []).map((t, i) => <span key={i} className="pill">{t}</span>)}
+                {centerEv.fixedDate && <span className="pill pill-dark">確定 {fmtFixed(centerEv.fixedDate)}</span>}
+              </div>
+              <div className="flex gap-2 justify-center mt-4">
+                <button onClick={() => navigate(`/e/${centerEv.id}`)}
+                  className="btn-dark px-6 py-2.5 text-xs">開く →</button>
+                <button onClick={() => handleCopy(centerEv)}
+                  className="btn-soft px-4 py-2.5 text-xs">📋</button>
+                <button onClick={() => handleArchiveToggle(centerEv)}
+                  className="btn-soft px-4 py-2.5 text-xs">📦</button>
+              </div>
+            </div>
+          )}
+
+          {/* ドット */}
+          <div className="flex justify-center gap-1.5 mt-5">
+            {active.map((_, i) => (
+              <div key={i} onClick={() => setCenter(i)}
+                className="rounded-full cursor-pointer"
+                style={{
+                  height: 5,
+                  width: i === center ? 18 : 5,
+                  background: i === center ? '#111' : 'rgba(0,0,0,0.15)',
+                  transition: 'all 0.2s',
+                }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== グリッド ===== */}
+      {view === 'grid' && (
+        <div className="grid grid-cols-2 gap-3">
+          {active.map((ev) => (
+            <div key={ev.id} className="glass-sm overflow-hidden cursor-pointer"
+              onClick={() => navigate(`/e/${ev.id}`)}>
+              <EventCover ev={ev} height={110} className="text-[42px]" />
+              <div className="p-3">
+                <div className="font-black text-[13px] leading-tight mb-1.5" style={{ letterSpacing: '-0.3px' }}>
+                  {ev.title}
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {(ev.tags || []).slice(0, 2).map((t, i) => (
+                    <span key={i} className="pill" style={{ fontSize: 9, padding: '2px 8px' }}>{t}</span>
+                  ))}
+                  {ev.fixedDate && (
+                    <span className="pill pill-dark" style={{ fontSize: 9, padding: '2px 8px' }}>
+                      {fmtFixed(ev.fixedDate)}
+                    </span>
+                  )}
+                </div>
+                <ParticipantChips activityId={ev.id} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* アーカイブ */}
       {archived.length > 0 && (
-        <div className="px-2">
-          <button
-            onClick={() => setShowArchived((v) => !v)}
-            className="w-full text-[11px] font-black text-gray-400 py-3 uppercase tracking-widest"
-          >
+        <div className="mt-8 px-1">
+          <button onClick={() => setShowArchived((v) => !v)}
+            className="w-full sec-label py-3 bg-transparent border-0 cursor-pointer">
             📦 アーカイブ（{archived.length}） {showArchived ? '▲' : '▼'}
           </button>
           {showArchived && (
-            <div className="grid gap-4 mt-2 animate-in">
+            <div className="grid grid-cols-2 gap-3 mt-2 animate-in">
               {archived.map((ev) => (
-                <EventCard key={ev.id} ev={ev} onArchiveToggle={handleArchiveToggle} onCopy={handleCopy} />
+                <div key={ev.id} className="glass-sm overflow-hidden" style={{ opacity: 0.65 }}>
+                  <EventCover ev={ev} height={80} className="text-[32px]" />
+                  <div className="p-3">
+                    <div className="font-black text-xs leading-tight mb-2">{ev.title}</div>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => handleArchiveToggle(ev)}
+                        className="btn-soft text-[9px] px-2.5 py-1 flex-1">↩️ 復元</button>
+                      <button onClick={() => handleCopy(ev)}
+                        className="btn-soft text-[9px] px-2.5 py-1 flex-1">📋 コピー</button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           )}

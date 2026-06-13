@@ -1,27 +1,186 @@
-/* flatpickr カスタム */
+/* ===== SyncAct v2.1 Design System (Vinylee-inspired light) ===== */
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', 'Hiragino Sans', sans-serif;
+  background: #e8e4de;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  color: #111;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* グラスカード */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 28px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.glass-sm {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* ボタン */
+.btn-dark {
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 100px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: -0.2px;
+  transition: transform 0.1s;
+}
+.btn-dark:active { transform: scale(0.96); }
+
+.btn-soft {
+  background: rgba(0, 0, 0, 0.06);
+  color: #444;
+  border: none;
+  border-radius: 100px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.btn-soft:active { transform: scale(0.95); }
+
+/* 入力 */
+.input-soft {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #111;
+  outline: none;
+}
+.input-soft::placeholder { color: #999; font-weight: 500; }
+.input-soft:focus { background: rgba(0, 0, 0, 0.08); }
+
+/* タグピル */
+.pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(0, 0, 0, 0.07);
+  color: #555;
+  display: inline-block;
+}
+.pill-dark { background: #111; color: #fff; }
+
+/* セクションラベル */
+.sec-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #999;
+}
+
+/* ===== カバーフロー ===== */
+.cf-wrap {
+  position: relative;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.cf-card {
+  position: absolute;
+  width: 180px;
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cf-cover {
+  width: 100%;
+  height: 215px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+  position: relative;
+  background-size: cover;
+  background-position: center;
+}
+
+.cf-label {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 40px 14px 14px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+  color: #fff;
+}
+
+.cf-title { font-size: 13px; font-weight: 800; line-height: 1.2; letter-spacing: -0.3px; }
+.cf-sub { font-size: 10px; font-weight: 500; opacity: 0.8; margin-top: 2px; }
+
+.cf-pos-0  { transform: translateX(0) scale(1); z-index: 5; box-shadow: 0 24px 64px rgba(0,0,0,0.22); }
+.cf-pos--1 { transform: translateX(-148px) scale(0.80) perspective(500px) rotateY(42deg); z-index: 4; opacity: 0.80; box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+.cf-pos--2 { transform: translateX(-255px) scale(0.62) perspective(500px) rotateY(50deg); z-index: 3; opacity: 0.45; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+.cf-pos-1  { transform: translateX(148px) scale(0.80) perspective(500px) rotateY(-42deg); z-index: 4; opacity: 0.80; box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+.cf-pos-2  { transform: translateX(255px) scale(0.62) perspective(500px) rotateY(-50deg); z-index: 3; opacity: 0.45; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+.cf-pos-hidden { transform: translateX(0) scale(0.4); opacity: 0; z-index: 1; pointer-events: none; }
+
+/* ===== flatpickr ===== */
+.flatpickr-calendar {
+  border-radius: 20px !important;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18) !important;
+  border: none !important;
+  font-family: inherit !important;
+}
+
 .flatpickr-day.holiday {
-  background: #fff1f2 !important;
-  color: #f43f5e !important;
-  border-color: #fecdd3 !important;
-  font-weight: bold;
+  background: #fdf0f0 !important;
+  color: #c0392b !important;
+  border-color: #f5d5d2 !important;
+  font-weight: 700;
 }
+
 .flatpickr-day.hot {
-  background: #ecfdf5 !important;
-  color: #059669 !important;
-  border-color: #6ee7b7 !important;
-  font-weight: 900;
-  box-shadow: 0 0 0 2px #6ee7b7 inset;
-}
-.flatpickr-day.hot.holiday {
-  background: linear-gradient(135deg, #ecfdf5 50%, #fff1f2 50%) !important;
-}
-.flatpickr-day.fixedday {
-  background: #f43f5e !important;
-  color: white !important;
-  border-color: #e11d48 !important;
+  background: #111 !important;
+  color: #fff !important;
+  border-color: #111 !important;
   font-weight: 900;
 }
 
+.flatpickr-day.hot.holiday {
+  background: linear-gradient(135deg, #111 60%, #c0392b 60%) !important;
+  color: #fff !important;
+}
+
+.flatpickr-day.fixedday {
+  outline: 2px solid #111;
+  outline-offset: -2px;
+  font-weight: 900;
+}
+
+.flatpickr-day.selected {
+  background: #555 !important;
+  border-color: #555 !important;
+}
+
+/* アニメーション */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -29,11 +188,11 @@
 .animate-in { animation: fadeIn 0.4s ease-out forwards; }
 
 .spinner {
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  border-left-color: #3b82f6;
+  border: 3px solid rgba(0, 0, 0, 0.08);
+  border-left-color: #111;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
+  width: 22px;
+  height: 22px;
+  animation: spin 0.9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

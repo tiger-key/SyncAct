@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import flatpickr from 'flatpickr';
 import { Japanese } from 'flatpickr/dist/l10n/ja.js';
 import {
-  listenEvent, listenResponses, updateEventMemo, setFixedDate,
-  setEventStatus, copyEvent, submitResponse, updateResponse,
+  listenEvent, listenResponses, updateEventMemo, updateEventCover,
+  setFixedDate, setEventStatus, copyEvent, submitResponse, updateResponse,
   deleteResponse, verifyPasscode,
 } from '../lib/db';
 import { fmtDateLocal } from '../lib/utils';
+import { resizeImage } from '../lib/covers';
+import EventCover from '../components/EventCover';
 import MemoCard from '../components/MemoCard';
 import DateSummary from '../components/DateSummary';
 import ResponseList from '../components/ResponseList';
@@ -19,13 +21,13 @@ export default function EventPage() {
   const { activityId } = useParams();
   const navigate = useNavigate();
 
-  const [event, setEvent] = useState(undefined); // undefined=読込中, null=なし
+  const [event, setEvent] = useState(undefined);
   const [responses, setResponses] = useState([]);
   const [name, setName] = useState('');
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [selectedDates, setSelectedDates] = useState([]);
-  const [editingResponse, setEditingResponse] = useState(null); // 修正対象
-  const [modal, setModal] = useState(null); // { mode, target?, pendingStatus? }
+  const [editingResponse, setEditingResponse] = useState(null);
+  const [modal, setModal] = useState(null);
   const [modalError, setModalError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -36,11 +38,9 @@ export default function EventPage() {
   const countsRef = useRef({ counts: {}, max: 0 });
   const fixedRef = useRef(null);
 
-  // リアルタイム購読
   useEffect(() => listenEvent(activityId, setEvent), [activityId]);
   useEffect(() => listenResponses(activityId, setResponses), [activityId]);
 
-  // 集計（カレンダーハイライト用）
   useEffect(() => {
     const counts = {};
     responses
@@ -56,44 +56,51 @@ export default function EventPage() {
     fpRef.current?.redraw();
   }, [event?.fixedDate]);
 
-  // flatpickr 初期化
+  // 【カレンダー不具合の修正】
+  // 旧コードはマウント直後のeffectでflatpickrを初期化していたが、
+  // その時点ではイベント読込中で input がレンダリングされておらず ref が null だった。
+  // → event が読み込まれて input が描画された後に初期化するよう依存配列を修正。
   useEffect(() => {
+    if (!event || !pickerRef.current || fpRef.current) return;
     let cancelled = false;
     (async () => {
       holidaysRef.current = await getHolidays();
-      if (cancelled || !pickerRef.current) return;
-      fpRef.current = flatpickr(pickerRef.current, {
+      if (cancelled || !pickerRef.current || fpRef.current) return;
+
+      const opts = {
         mode: 'multiple',
         locale: Japanese,
         dateFormat: 'Y-m-d',
         onChange: (dates) => setSelectedDates(dates.map(fmtDateLocal)),
         onDayCreate: (dObj, dStr, fp, dayElem) => {
-          // 【修正】toISOString()はUTC変換で日付がずれるため、ローカル日付でフォーマット
           const dateStr = fmtDateLocal(dayElem.dateObj);
           if (holidaysRef.current[dateStr]) dayElem.classList.add('holiday');
           const { counts, max } = countsRef.current;
           if (max >= 2 && counts[dateStr] === max) dayElem.classList.add('hot');
           if (fixedRef.current === dateStr) dayElem.classList.add('fixedday');
         },
-      });
+      };
+
+      fpRef.current = flatpickr(pickerRef.current, opts);
+
+      // 候補月が指定されていればその月を初期表示
+      if (event.targetMonth) {
+        const [y, m] = event.targetMonth.split('-').map(Number);
+        fpRef.current.jumpToDate(new Date(y, m - 1, 1));
+      }
       fpRef.current.redraw();
     })();
-    return () => {
-      cancelled = true;
-      fpRef.current?.destroy();
-      fpRef.current = null;
-    };
-  }, [activityId]);
+    return () => { cancelled = true; };
+  }, [event]);
+
+  // アンマウント時にflatpickrを破棄
+  useEffect(() => () => { fpRef.current?.destroy(); fpRef.current = null; }, []);
 
   if (event === undefined) {
-    return <p className="text-center py-12 text-gray-300 font-bold">読み込み中...</p>;
+    return <p className="text-center py-12 text-gray-400 font-bold">読み込み中...</p>;
   }
   if (event === null) {
-    return (
-      <div className="text-center py-12 space-y-4">
-        <p className="text-gray-400 font-black">イベントが見つかりません 🫥</p>
-      </div>
-    );
+    return <p className="text-center py-12 text-gray-400 font-black">イベントが見つかりません 🫥</p>;
   }
 
   const toggleRole = (role) => {
@@ -102,7 +109,6 @@ export default function EventPage() {
     );
   };
 
-  // ===== 送信フロー =====
   const startSubmit = (status) => {
     if (!name.trim()) return alert('お名前を入れてね');
     if (status === 'available' && !selectedDates.length) return alert('日付を選んでね');
@@ -116,16 +122,16 @@ export default function EventPage() {
 
   const handlePasscodeSubmit = async (code) => {
     if (modal.mode === 'set') {
-      // 新規回答
+      const pendingStatus = modal.pendingStatus;
       setModal(null);
       setLoading(true);
       try {
         await submitResponse({
           activityId,
           name: name.trim(),
-          dates: modal.pendingStatus === 'unavailable' ? [] : selectedDates,
+          dates: pendingStatus === 'unavailable' ? [] : selectedDates,
           roles: selectedRoles,
-          status: modal.pendingStatus,
+          status: pendingStatus,
           passcode: code,
         });
         setDone(true);
@@ -136,8 +142,11 @@ export default function EventPage() {
         setLoading(false);
       }
     } else {
-      // 本人確認 → 編集モードへ
       const r = modal.target;
+      if (!r.passcodeHash) {
+        setModalError('この回答は旧データのため修正できません 🙏');
+        return;
+      }
       if (!verifyPasscode(r, code)) {
         setModalError('パスコードが違うみたい 🤔');
         return;
@@ -194,7 +203,6 @@ export default function EventPage() {
     setModal({ mode: 'verify', target: r });
   };
 
-  // ===== イベント操作 =====
   const handleArchive = async () => {
     if (!confirm(`「${event.title}」をアーカイブする？`)) return;
     await setEventStatus(activityId, 'archived');
@@ -208,30 +216,37 @@ export default function EventPage() {
     window.scrollTo(0, 0);
   };
 
+  const handleCoverChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const dataUrl = await resizeImage(file);
+      await updateEventCover(activityId, dataUrl);
+    } catch (err) {
+      alert('画像のアップロードに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const copyUrl = () => {
     navigator.clipboard.writeText(location.href);
     alert('コピーしました！');
   };
 
-  // ===== 完了画面 =====
   if (done) {
     return (
       <div className="space-y-8 animate-in text-center pt-10">
-        <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100">
+        <div className="glass p-10">
           <div className="text-6xl mb-6">✅</div>
-          <h2 className="text-2xl font-black text-gray-900 mb-2">送信完了！</h2>
+          <h2 className="text-2xl font-black mb-2" style={{ letterSpacing: '-0.8px' }}>送信完了！</h2>
           <p className="text-xs text-gray-400 font-bold">パスコードは忘れないでね 🔐</p>
           <div className="grid gap-3 mt-6">
-            <button
-              onClick={() => setDone(false)}
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-md shadow-lg"
-            >
+            <button onClick={() => setDone(false)} className="btn-dark w-full py-4 text-base" style={{ borderRadius: 18 }}>
               回答状況を見る
             </button>
-            <button
-              onClick={() => navigate(`/g/${event.groupId}`)}
-              className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl font-black text-md"
-            >
+            <button onClick={() => navigate(`/g/${event.groupId}`)} className="btn-soft w-full py-4 text-base" style={{ borderRadius: 18 }}>
               一覧へ戻る
             </button>
           </div>
@@ -241,7 +256,7 @@ export default function EventPage() {
   }
 
   return (
-    <div className="space-y-6 animate-in pb-12">
+    <div className="space-y-4 animate-in pb-12">
       {loading && <LoadingOverlay />}
       {modal && (
         <PasscodeModal
@@ -253,89 +268,102 @@ export default function EventPage() {
         />
       )}
 
-      {/* ヘッダーカード */}
-      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border-t-[12px] border-blue-600">
-        <div className="flex flex-wrap gap-2 mb-3">
-          {(event.tags || []).map((t, i) => (
-            <span key={i} className="px-3 py-1 text-[11px] font-black bg-blue-100 text-blue-700 rounded-md shadow-sm uppercase">{t}</span>
-          ))}
+      {/* カバーヘッダー */}
+      <div className="glass overflow-hidden">
+        <div className="relative">
+          <EventCover ev={event} height={170} className="text-[64px]">
+            <div className="cf-label" style={{ padding: '50px 18px 16px' }}>
+              <div className="flex gap-1.5 flex-wrap mb-1.5">
+                {(event.tags || []).map((t, i) => (
+                  <span key={i} className="pill" style={{ background: 'rgba(255,255,255,0.22)', color: '#fff' }}>{t}</span>
+                ))}
+              </div>
+              <div className="font-black text-white" style={{ fontSize: 22, letterSpacing: '-0.8px', lineHeight: 1.15 }}>
+                {event.title}
+              </div>
+            </div>
+          </EventCover>
+          <label className="absolute top-3 right-3 cursor-pointer rounded-full px-3 py-1.5 text-[9px] font-black uppercase"
+            style={{ background: 'rgba(0,0,0,0.4)', color: '#fff', backdropFilter: 'blur(8px)' }}>
+            📷 変更
+            <input type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
+          </label>
         </div>
-        <h2 className="text-2xl font-black text-gray-900 mb-1">{event.title}</h2>
-        <div className="mt-4 p-3 bg-gray-50 rounded-2xl flex items-center justify-between border border-gray-100">
-          <span className="text-[10px] font-mono text-gray-400 truncate mr-3">{location.href}</span>
-          <button onClick={copyUrl} className="text-xs font-black text-blue-600 hover:text-blue-800 uppercase shrink-0">コピー</button>
-        </div>
-        <div className="flex gap-2 mt-3">
-          <button onClick={handleArchive} className="flex-1 text-[10px] font-black text-gray-400 bg-gray-50 py-2 rounded-xl">📦 アーカイブ</button>
-          <button onClick={handleCopy} className="flex-1 text-[10px] font-black text-blue-500 bg-blue-50 py-2 rounded-xl">📋 コピー</button>
+        <div className="p-4">
+          <div className="flex items-center justify-between rounded-2xl px-4 py-2.5" style={{ background: 'rgba(0,0,0,0.04)' }}>
+            <span className="text-[10px] font-mono text-gray-400 truncate mr-3">{location.href}</span>
+            <button onClick={copyUrl} className="text-[10px] font-black uppercase bg-transparent border-0 cursor-pointer shrink-0" style={{ color: '#111' }}>
+              コピー
+            </button>
+          </div>
+          <div className="flex gap-2 mt-2.5">
+            <button onClick={handleArchive} className="btn-soft flex-1 py-2 text-[10px]">📦 アーカイブ</button>
+            <button onClick={handleCopy} className="btn-soft flex-1 py-2 text-[10px]">📋 コピー</button>
+          </div>
         </div>
       </div>
 
       {/* 共有メモ */}
       <MemoCard memo={event.memo} onSave={(m) => updateEventMemo(activityId, m)} />
 
-      {/* 日程候補・確定 */}
+      {/* 日程候補 */}
       <DateSummary
         responses={responses}
         fixedDate={event.fixedDate}
-        onFix={(d) => {
-          if (confirm(`${d} で確定する？`)) setFixedDate(activityId, d);
-        }}
-        onUnfix={() => {
-          if (confirm('確定を解除する？')) setFixedDate(activityId, null);
-        }}
+        onFix={(d) => { if (confirm(`${d} で確定する？`)) setFixedDate(activityId, d); }}
+        onUnfix={() => { if (confirm('確定を解除する？')) setFixedDate(activityId, null); }}
       />
 
       {/* 回答フォーム */}
-      <div className={`bg-white p-7 rounded-[2.5rem] shadow-xl space-y-6 border ${editingResponse ? 'border-amber-300 ring-2 ring-amber-200' : 'border-gray-100'}`}>
+      <div className="glass p-6 space-y-5"
+        style={editingResponse ? { outline: '2px solid #d4a017', outlineOffset: -2 } : {}}>
         {editingResponse && (
-          <div className="bg-amber-50 p-3 rounded-2xl flex justify-between items-center animate-in">
-            <span className="text-[11px] font-black text-amber-700">✏️ {editingResponse.name} さんの回答を修正中</span>
-            <button onClick={resetForm} className="text-[10px] font-black text-gray-400 bg-white px-3 py-1 rounded-full">やめる</button>
+          <div className="rounded-2xl p-3 flex justify-between items-center animate-in"
+            style={{ background: 'rgba(212,160,23,0.12)' }}>
+            <span className="text-[11px] font-black" style={{ color: '#9a7209' }}>
+              ✏️ {editingResponse.name} さんの回答を修正中
+            </span>
+            <button onClick={resetForm} className="btn-soft text-[10px] px-3 py-1">やめる</button>
           </div>
         )}
+
         <div>
-          <label className="text-[11px] font-black text-gray-400 mb-2 block uppercase">お名前</label>
+          <label className="sec-label block mb-2">お名前</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!!editingResponse}
             type="text"
             placeholder="なまえを入力"
-            className="w-full p-4 bg-gray-100 rounded-2xl outline-none font-extrabold text-lg disabled:opacity-60"
+            className="input-soft"
+            style={{ fontSize: 17, fontWeight: 800, opacity: editingResponse ? 0.6 : 1 }}
           />
         </div>
+
         {(event.roles || []).length > 0 && (
-          <div className="space-y-3">
-            <label className="text-[11px] font-black text-gray-400 uppercase">担当できる役割</label>
+          <div>
+            <label className="sec-label block mb-2">担当できる役割</label>
             <div className="flex flex-wrap gap-2">
               {event.roles.map((role) => {
                 const active = selectedRoles.includes(role);
                 return (
-                  <div
-                    key={role}
-                    onClick={() => toggleRole(role)}
-                    className={`px-4 py-2 rounded-full text-[11px] font-black cursor-pointer transition-all border-2 ${
-                      active
-                        ? 'bg-blue-500 text-white border-blue-600'
-                        : 'bg-gray-100 text-gray-500 border-transparent'
-                    }`}
-                  >
+                  <button key={role} onClick={() => toggleRole(role)}
+                    className={active ? 'btn-dark px-4 py-2 text-[11px]' : 'btn-soft px-4 py-2 text-[11px]'}>
                     {role}
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
         )}
+
         <div>
-          <div className="flex justify-between items-center mb-2 px-1">
-            <label className="text-[11px] font-black text-gray-400 uppercase">空いてる日</label>
-            <button
-              onClick={() => startSubmit('unavailable')}
-              className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-md border border-rose-100"
-            >
-              不参加 ❌
+          <div className="flex justify-between items-center mb-2">
+            <label className="sec-label">空いてる日</label>
+            <button onClick={() => startSubmit('unavailable')}
+              className="text-[10px] font-black uppercase bg-transparent border-0 cursor-pointer"
+              style={{ color: '#c0392b' }}>
+              不参加 ✕
             </button>
           </div>
           <input
@@ -343,31 +371,29 @@ export default function EventPage() {
             type="text"
             placeholder="カレンダーを開く 📅"
             readOnly
-            className="w-full p-4 bg-gray-100 rounded-2xl outline-none cursor-pointer font-bold text-blue-600"
+            className="input-soft cursor-pointer"
           />
-          <p className="text-[9px] text-gray-300 font-bold mt-1.5 px-1">
-            🟢 みんな空いてる日 / 🔴 祝日 / 赤塗り = 確定日
+          <p className="text-[9px] text-gray-400 font-bold mt-1.5 px-1">
+            ⬛ みんな空いてる日 / 🔴 祝日 / 枠 = 確定日
           </p>
         </div>
+
         <div className="space-y-2">
-          <button
-            onClick={() => startSubmit('available')}
-            className="w-full bg-gray-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-black active:scale-95 transition-transform"
-          >
+          <button onClick={() => startSubmit('available')}
+            className="btn-dark w-full py-5 text-base" style={{ borderRadius: 18 }}>
             {editingResponse ? '修正を保存する 💾' : '送信する ✉️'}
           </button>
           {editingResponse && (
-            <button
-              onClick={handleDelete}
-              className="w-full bg-rose-50 text-rose-500 py-3 rounded-2xl font-black text-xs border border-rose-100"
-            >
+            <button onClick={handleDelete}
+              className="w-full py-3 rounded-2xl font-black text-xs border-0 cursor-pointer"
+              style={{ background: 'rgba(192,57,43,0.08)', color: '#c0392b' }}>
               この回答を削除する 🗑️
             </button>
           )}
         </div>
       </div>
 
-      {/* 回答状況（リアルタイム） */}
+      {/* 回答状況 */}
       <ResponseList responses={responses} onTapResponse={handleTapResponse} />
     </div>
   );

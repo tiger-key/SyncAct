@@ -8,7 +8,7 @@ import { genId, toArray } from './utils';
 
 // ============ events ============
 
-export async function createEvent({ groupId, title, desc, tags, roles, memo }) {
+export async function createEvent({ groupId, title, desc, tags, roles, memo, targetMonth, coverImage }) {
   const activityId = genId();
   await setDoc(doc(db, 'events', activityId), {
     groupId: groupId || 'default',
@@ -17,16 +17,13 @@ export async function createEvent({ groupId, title, desc, tags, roles, memo }) {
     tags: toArray(tags),
     roles: toArray(roles),
     memo: memo || '',
+    targetMonth: targetMonth || null,   // "2026-07" 形式。回答画面のカレンダー初期表示月
+    coverImage: coverImage || null,     // リサイズ済みdataURL
     fixedDate: null,
     status: 'active',
     createdAt: serverTimestamp(),
   });
   return activityId;
-}
-
-export async function getEvent(activityId) {
-  const snap = await getDoc(doc(db, 'events', activityId));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
 export function listenEvent(activityId, callback) {
@@ -50,6 +47,10 @@ export async function updateEventMemo(activityId, memo) {
   await updateDoc(doc(db, 'events', activityId), { memo });
 }
 
+export async function updateEventCover(activityId, coverImage) {
+  await updateDoc(doc(db, 'events', activityId), { coverImage });
+}
+
 export async function setFixedDate(activityId, dateStr) {
   await updateDoc(doc(db, 'events', activityId), { fixedDate: dateStr });
 }
@@ -66,6 +67,8 @@ export async function copyEvent(ev) {
     tags: ev.tags,
     roles: ev.roles,
     memo: ev.memo,
+    targetMonth: null, // コピー時は月をリセット
+    coverImage: ev.coverImage,
   });
 }
 
@@ -88,7 +91,7 @@ export async function submitResponse({ activityId, name, dates, roles, status, p
     name,
     dates,
     roles,
-    status, // 'available' | 'unavailable'
+    status,
     passcodeHash: hashSync(passcode, 8),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -96,6 +99,7 @@ export async function submitResponse({ activityId, name, dates, roles, status, p
 }
 
 export function verifyPasscode(response, passcode) {
+  if (!response.passcodeHash) return false; // 旧移行データはパスコードなし
   return compareSync(passcode, response.passcodeHash);
 }
 

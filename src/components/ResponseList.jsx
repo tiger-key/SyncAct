@@ -2,19 +2,17 @@ import { formatDateJa } from '../lib/utils';
 
 export default function ResponseList({ responses, onTapResponse }) {
   return (
-    <div className="bg-white p-7 rounded-[2.5rem] shadow-xl space-y-5 border border-gray-100">
-      <div className="flex justify-between items-center border-b pb-3">
-        <h3 className="text-[11px] font-black text-gray-400 tracking-widest uppercase">回答状況</h3>
-        <span className="text-[9px] font-black text-emerald-500 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+    <div className="glass p-6 space-y-4">
+      <div className="flex justify-between items-center pb-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+        <h3 className="sec-label">回答状況</h3>
+        <span className="text-[9px] font-black flex items-center gap-1" style={{ color: '#1d9e75' }}>
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#1d9e75' }}></span>
           LIVE
         </span>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {!responses.length && (
-          <p className="text-center py-4 text-gray-300 text-[10px] font-black uppercase">
-            No responses yet
-          </p>
+          <p className="text-center py-4 text-gray-400 text-[10px] font-black uppercase">No responses yet</p>
         )}
         {responses.map((r) => {
           const isBatsu = r.status === 'unavailable';
@@ -22,9 +20,8 @@ export default function ResponseList({ responses, onTapResponse }) {
             <div
               key={r.id}
               onClick={() => onTapResponse(r)}
-              className={`${
-                isBatsu ? 'bg-gray-100 opacity-60' : 'bg-blue-50/50'
-              } p-4 rounded-[1.5rem] border border-blue-100/30 cursor-pointer active:scale-[0.98] transition-transform`}
+              className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-transform"
+              style={{ background: 'rgba(0,0,0,0.04)', opacity: isBatsu ? 0.45 : 1 }}
             >
               <div className="flex justify-between items-center">
                 <span className="font-black text-sm">
@@ -35,10 +32,10 @@ export default function ResponseList({ responses, onTapResponse }) {
                     </span>
                   )}
                 </span>
-                <span className="text-[9px] text-gray-300 font-black">タップで修正 ✏️</span>
+                <span className="text-[9px] text-gray-400 font-bold">✏️</span>
               </div>
-              <div className={`text-[10px] mt-1 font-bold ${isBatsu ? 'text-gray-400' : 'text-blue-600'}`}>
-                {isBatsu ? '不参加 ❌' : (r.dates || []).map(formatDateJa).join(', ')}
+              <div className="text-[10px] mt-1 font-bold text-gray-500">
+                {isBatsu ? '不参加 ✕' : (r.dates || []).map(formatDateJa).join(', ')}
               </div>
             </div>
           );
