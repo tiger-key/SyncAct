@@ -1,4 +1,5 @@
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { LogoLockup } from './components/Logo';
 import GroupPage from './pages/GroupPage';
 import EventPage from './pages/EventPage';
 import CreatePage from './pages/CreatePage';
@@ -13,14 +14,10 @@ export default function App() {
     <div className="p-4 md:p-8">
       <div className="max-w-md mx-auto">
         {!isGroupTop && (
-          <header className="text-center pt-2 mb-6">
-            <h1
-              className="text-xl font-black italic cursor-pointer inline-block"
-              style={{ color: '#aaa', letterSpacing: '-0.5px' }}
-              onClick={() => navigate(-1)}
-            >
-              SyncAct
-            </h1>
+          <header className="flex justify-center pt-2 mb-6">
+            <div className="cursor-pointer" onClick={() => navigate(-1)}>
+              <LogoLockup iconSize={28} showTagline />
+            </div>
           </header>
         )}
         <Routes>

@@ -8,7 +8,7 @@ import { genId, toArray } from './utils';
 
 // ============ events ============
 
-export async function createEvent({ groupId, title, desc, tags, roles, memo, targetMonth, coverImage }) {
+export async function createEvent({ groupId, title, desc, tags, roles, memo, targetMonth, coverImage, eventMode, hostName }) {
   const activityId = genId();
   await setDoc(doc(db, 'events', activityId), {
     groupId: groupId || 'default',
@@ -19,6 +19,8 @@ export async function createEvent({ groupId, title, desc, tags, roles, memo, tar
     memo: memo || '',
     targetMonth: targetMonth || null,   // "2026-07" 形式。回答画面のカレンダー初期表示月
     coverImage: coverImage || null,     // リサイズ済みdataURL
+    eventMode: eventMode || 'schedule',
+    hostName: hostName || '',           // ホストの合言葉（ゲストが入力して閲覧制限を突破）
     fixedDate: null,
     status: 'active',
     createdAt: serverTimestamp(),
@@ -51,6 +53,17 @@ export async function updateEventCover(activityId, coverImage) {
   await updateDoc(doc(db, 'events', activityId), { coverImage });
 }
 
+// タイトル・タグ・役割・候補月などの後編集
+export async function updateEventInfo(activityId, fields) {
+  const patch = {};
+  if (fields.title !== undefined) patch.title = fields.title;
+  if (fields.tags !== undefined) patch.tags = toArray(fields.tags);
+  if (fields.roles !== undefined) patch.roles = toArray(fields.roles);
+  if (fields.targetMonth !== undefined) patch.targetMonth = fields.targetMonth || null;
+  if (fields.hostName !== undefined) patch.hostName = fields.hostName;
+  await updateDoc(doc(db, 'events', activityId), patch);
+}
+
 export async function setFixedDate(activityId, dateStr) {
   await updateDoc(doc(db, 'events', activityId), { fixedDate: dateStr });
 }
@@ -69,6 +82,8 @@ export async function copyEvent(ev) {
     memo: ev.memo,
     targetMonth: null, // コピー時は月をリセット
     coverImage: ev.coverImage,
+    eventMode: ev.eventMode,
+    hostName: ev.hostName,
   });
 }
 
@@ -85,13 +100,15 @@ export function listenResponses(activityId, callback) {
   });
 }
 
-export async function submitResponse({ activityId, name, dates, roles, status, passcode }) {
+export async function submitResponse({ activityId, name, dates, roles, status, passcode, comment, invitedBy }) {
   await addDoc(collection(db, 'responses'), {
     activityId,
     name,
     dates,
     roles,
     status,
+    comment: comment || '',
+    invitedBy: invitedBy || '',
     passcodeHash: hashSync(passcode, 8),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -103,11 +120,13 @@ export function verifyPasscode(response, passcode) {
   return compareSync(passcode, response.passcodeHash);
 }
 
-export async function updateResponse(responseId, { dates, roles, status }) {
+export async function updateResponse(responseId, { dates, roles, status, comment, invitedBy }) {
   await updateDoc(doc(db, 'responses', responseId), {
     dates,
     roles,
     status,
+    comment: comment || '',
+    invitedBy: invitedBy || '',
     updatedAt: serverTimestamp(),
   });
 }

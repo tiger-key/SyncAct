@@ -5,6 +5,7 @@ import {
   getGroup, setGroupName,
 } from '../lib/db';
 import EventCover from '../components/EventCover';
+import { LogoMark } from '../components/Logo';
 import { formatDateJa } from '../lib/utils';
 
 function fmtFixed(fd) {
@@ -83,8 +84,11 @@ export default function GroupPage() {
       {/* ヘッダー */}
       <div className="flex justify-between items-start mb-7 px-1">
         <div>
-          <div className="text-sm font-black italic" style={{ color: '#aaa', letterSpacing: '-0.3px' }}>
-            SyncAct
+          <div className="flex items-center gap-1.5">
+            <LogoMark size={16} />
+            <span className="text-sm font-black" style={{ color: '#163f5d', letterSpacing: '-0.3px' }}>
+              KAREN
+            </span>
           </div>
           <div onClick={editGroupName}
             className="font-black cursor-pointer"

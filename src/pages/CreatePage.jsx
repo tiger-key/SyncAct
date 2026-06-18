@@ -24,6 +24,8 @@ export default function CreatePage() {
   const [presets, setPresets] = useState([]);
   const [form, setForm] = useState({ title: '', roles: '', tags: '', memo: '' });
   const [targetMonth, setTargetMonth] = useState(null);
+  const [eventMode, setEventMode] = useState('schedule');
+  const [hostName, setHostName] = useState('');
   const [coverImage, setCoverImage] = useState(null);
   const [saveAsPreset, setSaveAsPreset] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,12 +55,12 @@ export default function CreatePage() {
     }
   };
 
-  const submit = async () => {
+const submit = async () => {
     if (!form.title) return alert('イベント名を入れてね');
     setLoading(true);
     try {
       const gid = groupId || 'default';
-      const newId = await createEvent({ groupId: gid, ...form, targetMonth, coverImage });
+      const newId = await createEvent({ groupId: gid, ...form, targetMonth, coverImage, eventMode, hostName });
       if (saveAsPreset) {
         await savePreset({ label: form.title, title: form.title, tags: form.tags, roles: form.roles });
       }
@@ -102,6 +104,40 @@ export default function CreatePage() {
         </div>
 
         <div>
+          <label className="sec-label block mb-2">モード</label>
+          <div className="flex gap-2">
+            <button onClick={() => setEventMode('schedule')}
+              className={eventMode === 'schedule' ? 'btn-dark flex-1 py-3 text-xs' : 'btn-soft flex-1 py-3 text-xs'}>
+              🗓 日程調整
+            </button>
+            <button onClick={() => setEventMode('invite')}
+              className={eventMode === 'invite' ? 'btn-dark flex-1 py-3 text-xs' : 'btn-soft flex-1 py-3 text-xs'}>
+              🎉 イベント提示
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 font-bold mt-1.5 px-1">
+            {eventMode === 'schedule'
+              ? '参加者が空いてる日を選んで日程を決める'
+              : '日時確定済み。参加/不参加を募る（招待制パーティー等）'}
+          </p>
+        </div>
+
+        {eventMode === 'invite' && (
+          <div>
+            <label className="sec-label block mb-2">合言葉</label>
+            <input
+              value={hostName}
+              onChange={(e) => setHostName(e.target.value)}
+              placeholder="合言葉を設定"
+              className="input-soft"
+            />
+            <p className="text-[10px] text-gray-400 font-bold mt-1.5 px-1">
+              ゲストがこの合言葉を入力すると、ホストは秘密の伝言を見られます
+            </p>
+          </div>
+        )}
+
+        <div>
           <label className="sec-label block mb-1">プリセット</label>
           <select onChange={(e) => applyPreset(e.target.value)} className="input-soft cursor-pointer">
             <option value="">プリセットを選択 📋</option>
@@ -117,19 +153,21 @@ export default function CreatePage() {
             placeholder="例：週末キャンプ" className="input-soft" />
         </div>
 
-        {/* 候補月 */}
-        <div>
-          <label className="sec-label block mb-2">候補月（カレンダーの初期表示）</label>
-          <div className="flex flex-wrap gap-2">
-            {months.map((m) => (
-              <button key={m.value}
-                onClick={() => setTargetMonth(targetMonth === m.value ? null : m.value)}
-                className={targetMonth === m.value ? 'btn-dark px-4 py-2 text-xs' : 'btn-soft px-4 py-2 text-xs'}>
-                {m.label}
-              </button>
-            ))}
+        {/* 候補月（日程調整モードのみ） */}
+        {eventMode === 'schedule' && (
+          <div>
+            <label className="sec-label block mb-2">候補月（カレンダーの初期表示）</label>
+            <div className="flex flex-wrap gap-2">
+              {months.map((m) => (
+                <button key={m.value}
+                  onClick={() => setTargetMonth(targetMonth === m.value ? null : m.value)}
+                  className={targetMonth === m.value ? 'btn-dark px-4 py-2 text-xs' : 'btn-soft px-4 py-2 text-xs'}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <label className="sec-label block mb-1">役割（カンマ区切り）</label>
